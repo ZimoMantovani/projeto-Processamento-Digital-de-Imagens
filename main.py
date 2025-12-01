@@ -23,8 +23,31 @@ def angle(a, b, c):
     cos_angle = dot / (mag_ab * mag_cb)
     return math.degrees(math.acos(cos_angle))
 
+def draw_text_with_background(frame, text, position, font_scale=0.8, color=(255,255,255), thickness=2):
+    """Desenha texto com fundo escuro para melhor visibilidade"""
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    
+    x, y = position
+    # Retângulo de fundo (preto semi-transparente)
+    padding = 5
+    overlay = frame.copy()
+    cv2.rectangle(overlay, 
+                  (x - padding, y - text_height - padding), 
+                  (x + text_width + padding, y + baseline + padding),
+                  (0, 0, 0), -1)
+    # Mistura o overlay com transparência
+    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+    
+    # Desenha o texto
+    cv2.putText(frame, text, (x, y), font, font_scale, color, thickness)
 
-cap = cv2.VideoCapture("agachamento.mp4")  # ou "video.mp4"
+
+cap = cv2.VideoCapture("agachamento.mp4")  # ou 0 para webcam
+
+# Variáveis para contar repetições
+rep_count = 0
+stage = "up"  # "up" ou "down"
 
 with mp_pose.Pose(min_detection_confidence=0.5,
                   min_tracking_confidence=0.5) as pose:
@@ -55,49 +78,81 @@ with mp_pose.Pose(min_detection_confidence=0.5,
 
             mp_drawing.draw_landmarks(frame, result.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-            # Ângulo do joelho
-            knee_angle = angle(hip, knee, ankle)
-            cv2.putText(frame, f"Angulo joelho: {int(knee_angle)}",
-                        (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
-
             feedback = []
 
-            # --- Análise do agachamento ---
-            if knee_angle < 70:
-                feedback.append("Agachamento muito baixo")
-            elif knee_angle < 140:
-                feedback.append("Agachando...")
-            else:
+            # --- Ângulo do joelho ---
+            knee_angle = angle(hip, knee, ankle)
+            draw_text_with_background(frame, f"Angulo joelho: {int(knee_angle)}", (30, 50))
+
+            # Contador de repetições e análise do agachamento
+            if knee_angle > 160:
+                stage = "up"
                 feedback.append("Em pe")
+            elif knee_angle < 90 and stage == "up":
+                stage = "down"
+                rep_count += 1
+                if knee_angle < 70:
+                    feedback.append("Agachamento profundo!")
+                else:
+                    feedback.append("Agachamento completo!")
+            elif knee_angle >= 90 and knee_angle <= 160:
+                feedback.append("Agachando...")
+                if knee_angle < 70:
+                    feedback.append("(Muito baixo)")
 
             # --- Inclinação da coluna ---
             coluna_ang = angle(shoulder, hip, knee)
-            cv2.putText(frame, f"Coluna: {int(coluna_ang)}",
-                        (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
+            draw_text_with_background(frame, f"Coluna: {int(coluna_ang)}", (30, 90))
 
             if coluna_ang > 130:
-                feedback.append("Coluna alinhada")
+                feedback.append("Coluna muito ereta")
+            elif coluna_ang > 90:
+                feedback.append("Coluna alinhada (OK)")
             elif coluna_ang > 60:
-                feedback.append("Coluna na posição correta")
+                feedback.append("Coluna inclinada")
             else:
                 feedback.append("Coluna muito para frente")
 
-            # --- Posição do pé ---
-            diff_x = (ankle[0] - hip[0]) / w
+            # --- Posição do pé (horizontal) ---
+            diff_x = (ankle[0] - knee[0]) / w
+            
+            # Tolerância ajustada
+            tolerance = 0.08
 
-            if diff_x < -0.10:
-                feedback.append("Pe muito para tras")
-            elif diff_x > 0.10:
-                feedback.append("Pe muito para frente")
+            if diff_x < -tolerance:
+                feedback.append("Joelho muito para frente")
+            elif diff_x > tolerance:
+                feedback.append("Joelho muito para tras")
+            else:
+                feedback.append("Joelho alinhado")
+
+            # --- Profundidade ideal do agachamento ---
+            if 80 <= knee_angle <= 100 and "Coluna alinhada (OK)" in feedback:
+                feedback.append("Postura ideal!")
+
+            # --- Contador de repetições ---
+            draw_text_with_background(frame, f"Repeticoes: {rep_count}", 
+                                     (w - 250, 50), font_scale=1.0, 
+                                     color=(0, 255, 255), thickness=2)
 
             # --- Mostrar feedback na tela ---
             y_offset = 140
             for fb in feedback:
-                cv2.putText(frame, fb, (30, y_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                # Cores diferentes para feedback
+                if "OK" in fb or "ideal" in fb or "completo" in fb or "alinhado" in fb:
+                    cor = (0, 255, 0)  # Verde
+                elif "muito" in fb and "Muito baixo" not in fb:
+                    cor = (0, 0, 255)  # Vermelho - avisos
+                elif "profundo" in fb:
+                    cor = (0, 255, 255)  # Amarelo - avançado
+                else:
+                    cor = (255, 255, 255)  # Branco - neutro
+                    
+                draw_text_with_background(frame, fb, (30, y_offset), 
+                                         font_scale=0.9, color=cor)
                 y_offset += 40
         
-        cv2.imshow("Analise de Postura", frame)
+        cv2.imshow("Agachamento - Analise de Postura", frame)
         if cv2.waitKey(1) & 0xFF == 27:
             break
 

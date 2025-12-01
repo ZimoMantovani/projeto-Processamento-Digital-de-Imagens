@@ -23,8 +23,31 @@ def angle(a, b, c):
     cos_angle = dot / (mag_ab * mag_cb)
     return math.degrees(math.acos(cos_angle))
 
+def draw_text_with_background(frame, text, position, font_scale=0.8, color=(255,255,255), thickness=2):
+    """Desenha texto com fundo escuro para melhor visibilidade"""
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    
+    x, y = position
+    # Retângulo de fundo (preto semi-transparente)
+    padding = 5
+    overlay = frame.copy()
+    cv2.rectangle(overlay, 
+                  (x - padding, y - text_height - padding), 
+                  (x + text_width + padding, y + baseline + padding),
+                  (0, 0, 0), -1)
+    # Mistura o overlay com transparência
+    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+    
+    # Desenha o texto
+    cv2.putText(frame, text, (x, y), font, font_scale, color, thickness)
 
-cap = cv2.VideoCapture("flexao2.mp4")  # ou "video.mp4"
+
+cap = cv2.VideoCapture("flexao2.mp4")  # ou 0 para webcam
+
+# Variáveis para contar repetições
+rep_count = 0
+stage = "up"  # "up" ou "down"
 
 with mp_pose.Pose(min_detection_confidence=0.5,
                   min_tracking_confidence=0.5) as pose:
@@ -64,20 +87,22 @@ with mp_pose.Pose(min_detection_confidence=0.5,
 
             # --- Ângulo do cotovelo ---
             elbow_angle = angle(shoulder, elbow, wrist)
-            cv2.putText(frame, f"Cotovelo: {int(elbow_angle)}",
-                        (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
+            draw_text_with_background(frame, f"Cotovelo: {int(elbow_angle)}", (30, 50))
 
+            # Contador de repetições
             if elbow_angle > 160:
+                stage = "up"
                 feedback.append("Posicao inicial (alta)")
-            elif elbow_angle > 90:
-                feedback.append("Executando")
-            else:
+            elif elbow_angle < 90 and stage == "up":
+                stage = "down"
+                rep_count += 1
                 feedback.append("Flexao completa!")
+            elif elbow_angle > 90 and elbow_angle <= 160:
+                feedback.append("Executando")
 
             # --- Linha da coluna ---
             coluna_angle = angle(shoulder, hip, ankle)
-            cv2.putText(frame, f"Coluna: {int(coluna_angle)}",
-                        (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
+            draw_text_with_background(frame, f"Coluna: {int(coluna_angle)}", (30, 90))
 
             if coluna_angle < 150:
                 feedback.append("Coluna torta")
@@ -86,28 +111,42 @@ with mp_pose.Pose(min_detection_confidence=0.5,
             else:
                 feedback.append("Coluna reta (OK)")
 
-            # --- Quadril alto ou baixo ---
-            # Medimos a posição vertical relativa do quadril
-            hip_y = hip[1]
-            shoulder_y = shoulder[1]
-            ankle_y = ankle[1]
-
-            if hip_y < shoulder_y - 20:
+            # --- Quadril alto ou baixo (CORRIGIDO) ---
+            # Calcula o ponto médio ideal entre ombro e tornozelo
+            ideal_hip_y = (shoulder[1] + ankle[1]) // 2
+            hip_deviation = hip[1] - ideal_hip_y
+            
+            # Tolerância de 50 pixels (ajuste conforme necessário)
+            tolerance = 50
+            
+            if hip_deviation < -tolerance:  # Hip_y menor = mais alto na tela
                 feedback.append("Quadril muito alto")
-            elif hip_y > ankle_y - 20:
+            elif hip_deviation > tolerance:  # Hip_y maior = mais baixo na tela
                 feedback.append("Quadril muito baixo")
 
-            # Postura perfeita
+            # Postura perfeita (ajustada)
             if ("Coluna reta (OK)" in feedback and 
-                elbow_angle > 160 and 
-                abs(hip_y - ((shoulder_y+ankle_y)//2)) < 20):
+                abs(hip_deviation) < tolerance):
                 feedback.append("Postura correta!")
+
+            # --- Contador de repetições ---
+            draw_text_with_background(frame, f"Repeticoes: {rep_count}", 
+                                     (w - 250, 50), font_scale=1.0, 
+                                     color=(0, 255, 255), thickness=2)
 
             # --- Mostrar feedback ---
             y_offset = 140
             for fb in feedback:
-                cv2.putText(frame, fb, (30, y_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                # Cores diferentes para feedback
+                if "OK" in fb or "correta" in fb or "completa" in fb:
+                    cor = (0, 255, 0)  # Verde
+                elif "torta" in fb or "muito" in fb:
+                    cor = (0, 0, 255)  # Vermelho
+                else:
+                    cor = (255, 255, 255)  # Branco
+                    
+                draw_text_with_background(frame, fb, (30, y_offset), 
+                                         font_scale=0.9, color=cor)
                 y_offset += 40
         
         cv2.imshow("Flexao - Analise de Postura", frame)
@@ -116,10 +155,3 @@ with mp_pose.Pose(min_detection_confidence=0.5,
 
 cap.release()
 cv2.destroyAllWindows()
-
-
-# Problema quadril muito baixo, 
-# adicionar fundo na letra, para melhor visibilidade
-#
-#
-#
