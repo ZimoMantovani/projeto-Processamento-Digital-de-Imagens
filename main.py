@@ -29,7 +29,7 @@ def draw_text_with_background(frame, text, position, font_scale=0.8, color=(255,
     (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
     
     x, y = position
-    # Retângulo de fundo (preto semi-transparente)
+    # Retângulo de fundo
     padding = 5
     overlay = frame.copy()
     cv2.rectangle(overlay, 
@@ -43,7 +43,7 @@ def draw_text_with_background(frame, text, position, font_scale=0.8, color=(255,
     cv2.putText(frame, text, (x, y), font, font_scale, color, thickness)
 
 
-cap = cv2.VideoCapture("agachamento.mp4")  # ou 0 para webcam
+cap = cv2.VideoCapture("agachamento.mp4")  
 
 # Variáveis para contar repetições
 rep_count = 0

@@ -29,21 +29,19 @@ def draw_text_with_background(frame, text, position, font_scale=0.8, color=(255,
     (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, thickness)
     
     x, y = position
-    # Retângulo de fundo (preto semi-transparente)
+    # Retângulo de fundo
     padding = 5
     overlay = frame.copy()
     cv2.rectangle(overlay, 
                   (x - padding, y - text_height - padding), 
                   (x + text_width + padding, y + baseline + padding),
                   (0, 0, 0), -1)
-    # Mistura o overlay com transparência
     cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
     
-    # Desenha o texto
     cv2.putText(frame, text, (x, y), font, font_scale, color, thickness)
 
 
-cap = cv2.VideoCapture("flexao2.mp4")  # ou 0 para webcam
+cap = cv2.VideoCapture("flexao2.mp4") 
 
 # Variáveis para contar repetições
 rep_count = 0
@@ -111,12 +109,12 @@ with mp_pose.Pose(min_detection_confidence=0.5,
             else:
                 feedback.append("Coluna reta (OK)")
 
-            # --- Quadril alto ou baixo (CORRIGIDO) ---
+            # --- Quadril alto ou baixo ---
             # Calcula o ponto médio ideal entre ombro e tornozelo
             ideal_hip_y = (shoulder[1] + ankle[1]) // 2
             hip_deviation = hip[1] - ideal_hip_y
             
-            # Tolerância de 50 pixels (ajuste conforme necessário)
+            # Tolerância de 50 pixels
             tolerance = 50
             
             if hip_deviation < -tolerance:  # Hip_y menor = mais alto na tela
